@@ -84,7 +84,7 @@ def training_routine(num_epochs, minibatch_size, learn_rate):
     return my_net
 
 if __name__ == '__main__':
-    net = training_routine(500, 64, 0.1)
+    net = training_routine(100, 50, 2)
     x = to_variable(to_tensor(np.array([[1,0,1,1,0,1,0], [0,1,0,0,0,0,0], [1,1,1,0,0,0,0]])))
     y = net(x)
     print('X: {}'.format(x.data.cpu().numpy()))
