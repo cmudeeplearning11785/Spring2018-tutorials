@@ -24,20 +24,20 @@ We typically select $ C=\max_j x_j $. That means the largest exponent we calcula
 
 \section{Softmax}
 
-Typical softmax formulation is $ f(x_i) = \frac{e^{x_i}}{\sum_j e^{x_j}} $.
+Typical softmax formulation is $ f(x)_i = \frac{e^{x_i}}{\sum_j e^{x_j}} $.
 
 \section{Cross-entropy}
 
-Typical cross-entropy formulation is $ L(p, q) = - p \log q$ (ignoring the summation).
+Typical cross-entropy formulation is $ L(p, q) = -\sum_i p_i \log q_i$.
 
 \section{Cross-entropy of Softmax}
 
-The cross-entropy of a softmax is therefore $L(p,f(x))=-p \log \frac{e^{x_i}}{\sum_j e^{x_j}}$. This calculation can be stabilized using the LogSumExp trick.
+The cross-entropy of a softmax is therefore $L(p,f(x))=- \sum_i p_i \log \frac{e^{x_i}}{\sum_j e^{x_j}}$. This calculation can be stabilized using the LogSumExp trick.
 
 \begin{align}
-L(p,f(x)) &=-p \log \frac{e^{x_i}}{\sum_j e^{x_j}} \\
-& = -p[ \log(e^{x_i}) - \log(\sum_j e^{x_j})] \\
-&= -p[ x_i - LogSumExp_j(x_j)]
+L(p,f(x)) &=- \sum_i p_i \log \frac{e^{x_i}}{\sum_j e^{x_j}} \\
+& = -\sum_i p_i [ \log(e^{x_i}) - \log(\sum_j e^{x_j})] \\
+L(p,f(x)) &= -\sum_i p_i [ x_i - LogSumExp_j(x_j)]
 \end{align}
 
 \section{Conclusion}
