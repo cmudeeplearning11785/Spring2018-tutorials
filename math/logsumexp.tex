@@ -1,0 +1,50 @@
+\documentclass{article}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\begin{document}
+
+\title{LogSumExp Derivation}
+\author{Benjamin Striner}
+
+\maketitle
+
+\section{LogSumExp Trick}
+
+Calculating $\log \sum_i e^{x_i} $ is frequent in machine learning and is referred to as LogSumExp. A common trick makes this function numerically stable.
+
+\begin{align}
+\log \sum_i e^{x_i - C} &= \log \sum_i \frac{e^{x_i}}{e^{C}} \\
+& = \log \frac{\sum_i e^{x_i}}{e^C} \\
+& = \log[\sum_i e^{x_i}] - \log e^{C} \\
+\log \sum_i e^{x_i - C} & = \log[\sum_i e^{x_i}] - C \\
+\log[\sum_i e^{x_i}] &= \log[\sum_i e^{x_i - C}]  + C
+\end{align}
+
+We typically select $ C=\max_j x_j $. That means the largest exponent we calculate is $e^0$, so our exponents never overflow.
+
+\section{Softmax}
+
+Typical softmax formulation is $ f(x_i) = \frac{e^{x_i}}{\sum_j e^{x_j}} $.
+
+\section{Cross-entropy}
+
+Typical cross-entropy formulation is $ L(p, q) = - p \log q$ (ignoring the summation).
+
+\section{Cross-entropy of Softmax}
+
+The cross-entropy of a softmax is therefore $L(p,f(x))=-p \log \frac{e^{x_i}}{\sum_j e^{x_j}}$. This calculation can be stabilized using the LogSumExp trick.
+
+\begin{align}
+L(p,f(x)) &=-p \log \frac{e^{x_i}}{\sum_j e^{x_j}} \\
+& = -p[ \log(e^{x_i}) - \log(\sum_j e^{x_j})] \\
+&= -p[ x_i - LogSumExp_j(x_j)]
+\end{align}
+
+\section{Conclusion}
+You normally won't have to do the math yourself. Pytorch loss functions ``BCEWithLogitsLoss'' and ``CrossEntropyLoss'' will perform these calculations for you.
+
+The important thing to remember is to not include the softmax or sigmoid output in your network when using these loss functions. The softmax or sigmoid are already included in the loss function and you don't want to accidentally apply them twice.
+
+You can build a network without using the trick, but you may or may not end up getting NaN errors.
+
+\end{document}
