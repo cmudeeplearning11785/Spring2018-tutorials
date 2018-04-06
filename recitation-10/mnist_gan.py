@@ -45,8 +45,9 @@ def format_images(images):
     gridsize = int(math.floor(math.sqrt(images.size(0))))
     images = images[:gridsize * gridsize]  # (g*g, c, h, w)
     images = images.view(gridsize, gridsize, c, h, w)  # (g,g,c,h,w)
-    images = images.permute(2, 0, 3, 1, 4).contiguous()  # (c, g, h, g, w)
-    images = images.view(1, c, gridsize * h, gridsize * w)  # (1, c, g*h, g*w)
+    images = images.permute(0, 3, 1, 4, 2).contiguous()  # (g, h, g, w, c)
+    images = images.view(1, gridsize * h, gridsize * w, c)  # (1, g*h, g*w, c)
+    images = images.permute(0, 3, 1, 2)  # (1, c, g*h, g*w)
     return images
 
 
@@ -87,7 +88,8 @@ class GeneratorNetwork(nn.Sequential):
     # Network for generation
     # Input is (N, latent_dim)
     def __init__(self, args):
-        super(GeneratorNetwork, self).__init__(*[m for m in [nn.Linear(args.latent_dim, 1024),
+        super(GeneratorNetwork, self).__init__(*[m for m in [
+            nn.Linear(args.latent_dim, 1024),
             nn.BatchNorm1d(1024) if args.generator_batchnorm else None,
             nn.LeakyReLU(),
             nn.Linear(1024, 7 * 7 * 128),
@@ -261,7 +263,9 @@ class GenerateDataCallback(Callback):
         generated = self.trainer.model.generate(Variable(latent))
         self.trainer.model.train()
         # Reshape, scale, and cast the data so it can be saved
-        grid = format_images(generated).squeeze(0).squeeze(0)
+        grid = format_images(generated).squeeze(0).permute(1, 2, 0)
+        if grid.size(2) == 1:
+            grid = grid.squeeze(2)
         array = grid.data.cpu().numpy() * 255.
         array = array.astype(np.uint8)
         # Save the image
