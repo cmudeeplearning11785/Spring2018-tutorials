@@ -50,7 +50,7 @@ def train_model(args):
         .validate_every((2, 'epochs')) \
         .save_every((5, 'epochs')) \
         .save_to_directory(args.save_directory) \
-        .set_max_num_epochs(10) \
+        .set_max_num_epochs(args.epochs) \
         .build_logger(TensorboardLogger(log_scalars_every=(1, 'iteration'),
                                         log_images_every='never'),
                       log_directory=args.save_directory)
@@ -80,7 +80,7 @@ def main(argv):
                         help='number of epochs to train (default: 20)')
     parser.add_argument('--no-cuda', action='store_true', default=False,
                         help='disables CUDA training')
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     args.cuda = not args.no_cuda and torch.cuda.is_available()
     train_model(args)
 
