@@ -18,6 +18,10 @@ class WGANDiscriminatorLoss(nn.Module):
         self.model = model
         self.penalty_weight = penalty_weight
 
+    # Run discriminator
+    def discriminate(self, xmix):
+        return self.model.discriminate(xmix)
+
     # Loss function for discriminator
     def forward(self, input, _):
         # Targets are ignored
@@ -33,12 +37,11 @@ class WGANDiscriminatorLoss(nn.Module):
         alpha = Variable(torch.rand(xreal.size(0), 1, 1, 1, out=xreal.data.new()))
         xmix = (alpha * xreal) + ((1. - alpha) * xfake)
         # Run discriminator on the combination
-        ymix = self.model.discriminate(xmix)
+        ymix = self.discriminate(xmix)
         # Calculate gradient of output w.r.t. input
         ysum = ymix.sum()
         grads = grad(ysum, [xmix], create_graph=True)[0]
         gradnorm = torch.sqrt((grads * grads).sum(3).sum(2).sum(1))
-        # gradnorm = (grads * grads).sum(3).sum(2).sum(1)
         graddiff = gradnorm - 1
         gradpenalty = (graddiff * graddiff).mean() * self.penalty_weight
 

@@ -221,7 +221,8 @@ class GeneratorTrainingCallback(Callback):
         torch.randn(*latent.size(), out=latent)
         latent = Variable(latent)
         # Calculate yfake
-        yfake = self.trainer.model.y_fake(latent)
+        y = Variable(torch.rand(latent.size(0), out=latent.data.new())*10).long()
+        yfake = self.trainer.model.y_fake(latent, y)
         # Calculate loss
         loss = self.criterion(yfake)
         # Perform update
@@ -247,6 +248,13 @@ class GenerateDataCallback(Callback):
             self.save_images()
             self.count = 0
 
+    def generate(self, latent):
+        # Set eval, generate, then set back to train
+        self.trainer.model.eval()
+        generated = self.trainer.model.generate(Variable(latent))
+        self.trainer.model.train()
+        return generated
+
     def save_images(self):
         # Generate images
         path = os.path.join(self.trainer.save_directory, 'generated_images')
@@ -258,10 +266,7 @@ class GenerateDataCallback(Callback):
             latent = self.latent.cuda()
         else:
             latent = self.latent
-        # Set eval, generate, then set back to train
-        self.trainer.model.eval()
-        generated = self.trainer.model.generate(Variable(latent))
-        self.trainer.model.train()
+        generated = self.generate(latent)
         # Reshape, scale, and cast the data so it can be saved
         grid = format_images(generated).squeeze(0).permute(1, 2, 0)
         if grid.size(2) == 1:

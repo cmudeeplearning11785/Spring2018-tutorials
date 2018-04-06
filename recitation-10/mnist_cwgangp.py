@@ -12,7 +12,7 @@ from torchvision import datasets
 from torchvision import transforms
 
 from mnist_gan import Reshape, format_images
-from mnist_gan import generate_video, mnist_data_loader, DiscriminatorNetwork, GeneratorNetwork
+from mnist_gan import generate_video
 from mnist_gan import save_args, GANModel, GenerateDataCallback, GeneratorTrainingCallback
 from mnist_wgangp import WGANDiscriminatorLoss, WGANGeneratorLoss
 
@@ -111,6 +111,7 @@ class CGANModel(GANModel):
         xfake = self.generator(latent, y)
         # Save images for later
         self._state_hooks['xfake'] = xfake
+        self._state_hooks['y'] = y
         self._state_hooks['generated_images'] = format_images(xfake)  # log the generated images
         return xfake
 
@@ -143,27 +144,57 @@ class CGANModel(GANModel):
         return self.y_real(xreal, y), self.y_fake(self.latent_sample(xreal), y)
 
 
+class CWGANDiscriminatorLoss(WGANDiscriminatorLoss):
+    def discriminate(self, xmix):
+        y = self.model._state_hooks['y']
+        return self.model.discriminate(xmix, y)
+
+
+class CGenerateDataCallback(GenerateDataCallback):
+    # Callback saves generated images to a folder
+    def __init__(self, args):
+        super(CGenerateDataCallback, self).__init__(args, gridsize=10)
+        self.y = torch.arange(0, 10).unsqueeze(1).expand(-1, 10).contiguous().view(-1).contiguous().long()
+
+    def end_of_training_iteration(self, **_):
+        # Check if it is time to generate images
+        self.count += 1
+        if self.count > self.frequency:
+            self.save_images()
+            self.count = 0
+
+    def generate(self, latent):
+        # Set eval, generate, then set back to train
+        self.trainer.model.eval()
+        y = Variable(self.y)
+        if self.trainer.is_cuda():
+            y = y.cuda()
+        generated = self.trainer.model.generate(Variable(latent), y)
+        self.trainer.model.train()
+        return generated
+
+
 def run(args):
     save_args(args)  # save command line to a file for reference
     train_loader = mnist_cgan_data_loader(args)  # get the data
-    model = GANModel(
+    model = CGANModel(
         args,
         discriminator=CDiscriminatorNetwork(args),
         generator=CGeneratorNetwork(args))
 
     # Build trainer
     trainer = Trainer(model)
-    trainer.build_criterion(WGANDiscriminatorLoss(penalty_weight=args.penalty_weight, model=model))
+    trainer.build_criterion(CWGANDiscriminatorLoss(penalty_weight=args.penalty_weight, model=model))
     trainer.build_optimizer('Adam', model.discriminator.parameters(), lr=args.discriminator_lr)
     trainer.save_every((1, 'epochs'))
     trainer.save_to_directory(args.save_directory)
     trainer.set_max_num_epochs(args.epochs)
-    trainer.register_callback(GenerateDataCallback(args))
+    trainer.register_callback(CGenerateDataCallback(args))
     trainer.register_callback(GeneratorTrainingCallback(
         args,
         parameters=model.generator.parameters(),
         criterion=WGANGeneratorLoss()))
-    trainer.bind_loader('train', train_loader)
+    trainer.bind_loader('train', train_loader, num_inputs=2)
     # Custom logging configuration so it knows to log our images
     logger = TensorboardLogger(
         log_scalars_every=(1, 'iteration'),
@@ -189,17 +220,18 @@ def main(argv):
     parser = argparse.ArgumentParser(description='PyTorch GAN Example')
 
     # Output directory
-    parser.add_argument('--save-directory', type=str, default='output/mnist_wgangp/v8', help='output directory')
+    parser.add_argument('--save-directory', type=str, default='output/mnist_cwgangp/v2', help='output directory')
 
     # Configuration
     parser.add_argument('--batch-size', type=int, default=128, metavar='N', help='batch size')
-    parser.add_argument('--epochs', type=int, default=100, metavar='N', help='number of epochs')
+    parser.add_argument('--epochs', type=int, default=50, metavar='N', help='number of epochs')
     parser.add_argument('--image-frequency', type=int, default=10, metavar='N', help='frequency to write images')
     parser.add_argument('--log-image-frequency', type=int, default=100, metavar='N', help='frequency to log images')
     parser.add_argument('--generator-frequency', type=int, default=10, metavar='N', help='frequency to train generator')
 
     # Hyperparameters
     parser.add_argument('--latent-dim', type=int, default=100, metavar='N', help='latent dimension')
+    parser.add_argument('--embedding-dim', type=int, default=32, metavar='N', help='latent dimension')
     parser.add_argument('--discriminator-lr', type=float, default=3e-4, metavar='N', help='discriminator learning rate')
     parser.add_argument('--generator-lr', type=float, default=3e-4, metavar='N', help='generator learning rate')
     parser.add_argument('--penalty-weight', type=float, default=20., metavar='N', help='gradient penalty weight')
