@@ -1,23 +1,18 @@
 import argparse
-import os
 import sys
 
-import numpy as np
 import torch
-from PIL import Image
 from inferno.trainers.basic import Trainer
-from inferno.trainers.callbacks.base import Callback
 from inferno.trainers.callbacks.logging.tensorboard import TensorboardLogger
 from torch import nn
-from torch.autograd import Variable
-from torch.optim import Adam
 from torch.utils.data.dataloader import DataLoader
 from torchvision import datasets
 from torchvision import transforms
 
-from mnist_gan import format_images, Reshape,save_args, GANModel, GenerateDataCallback, GeneratorTrainingCallback
+from mnist_gan import Reshape, save_args, GANModel, GenerateDataCallback, GeneratorTrainingCallback
 from mnist_gan import generate_video
 from mnist_wgangp import WGANGeneratorLoss, WGANDiscriminatorLoss
+
 
 def cifar10_data_loader(args):
     # Create DataLoader for CIFAR10
@@ -81,6 +76,7 @@ class CIFAR10DiscriminatorNetwork(nn.Sequential):
             nn.Linear(1024, 1),  # N, 1
             Reshape(-1)] if m is not None])  # N
 
+
 def run(args):
     save_args(args)  # save command line to a file for reference
     train_loader = cifar10_data_loader(args)  # get the data
@@ -109,7 +105,7 @@ def run(args):
     trainer.build_logger(logger, log_directory=args.save_directory)
     logger.observe_state('generated_images')
     logger.observe_state('real_images')
-    #logger._trainer_states_being_observed_while_training.remove('training_inputs')
+    # logger._trainer_states_being_observed_while_training.remove('training_inputs')
 
     if args.cuda:
         trainer.cuda()
@@ -127,7 +123,7 @@ def main(argv):
     parser = argparse.ArgumentParser(description='PyTorch GAN Example')
 
     # Output directory
-    parser.add_argument('--save-directory', type=str, default='output/cifar10_wgangp/v3', help='output directory')
+    parser.add_argument('--save-directory', type=str, default='output/cifar10_wgangp/v1', help='output directory')
 
     # Configuration
     parser.add_argument('--batch-size', type=int, default=64, metavar='N', help='batch size')
