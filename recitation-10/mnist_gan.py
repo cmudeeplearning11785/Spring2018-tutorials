@@ -87,49 +87,48 @@ class GeneratorNetwork(nn.Sequential):
     # Network for generation
     # Input is (N, latent_dim)
     def __init__(self, args):
-        super(GeneratorNetwork, self).__init__(
-            nn.Linear(args.latent_dim, 1024),
-            nn.BatchNorm1d(1024),
+        super(GeneratorNetwork, self).__init__(*[m for m in [nn.Linear(args.latent_dim, 1024),
+            nn.BatchNorm1d(1024) if args.generator_batchnorm else None,
             nn.LeakyReLU(),
             nn.Linear(1024, 7 * 7 * 128),
             Reshape(-1, 128, 7, 7),  # N, 128,7,7
-            nn.BatchNorm2d(128),
+            nn.BatchNorm2d(128) if args.generator_batchnorm else None,
             nn.LeakyReLU(),
             nn.ConvTranspose2d(128, 64, kernel_size=4, stride=2, padding=1),  # N, 64,14,14
-            nn.BatchNorm2d(64),
+            nn.BatchNorm2d(64) if args.generator_batchnorm else None,
             nn.LeakyReLU(),
             nn.ConvTranspose2d(64, 32, kernel_size=4, stride=2, padding=1),  # N, 32,28,28
-            nn.BatchNorm2d(32),
+            nn.BatchNorm2d(32) if args.generator_batchnorm else None,
             nn.LeakyReLU(),
             nn.Conv2d(32, 1, kernel_size=3, stride=1, padding=1),  # N, 1,28,28
-            nn.Sigmoid())
+            nn.Sigmoid()] if m is not None])
 
 
 class DiscriminatorNetwork(nn.Sequential):
     # Network for discrimination
     # Input is (N, 1, 28, 28)
     def __init__(self, args):
-        super(DiscriminatorNetwork, self).__init__(
+        super(DiscriminatorNetwork, self).__init__(*[m for m in [
             nn.Conv2d(1, 64, kernel_size=4, stride=2, padding=1),  # N, 64, 14, 14
-            nn.BatchNorm2d(64),
+            nn.BatchNorm2d(64) if args.discriminator_batchnorm else None,
             nn.LeakyReLU(),
             nn.Conv2d(64, 128, kernel_size=4, stride=2, padding=1),  # N, 128, 7, 7
-            nn.BatchNorm2d(128),
+            nn.BatchNorm2d(128) if args.discriminator_batchnorm else None,
             nn.LeakyReLU(),
             Reshape(-1, 128 * 7 * 7),  # N, 128*7*7
             nn.Linear(128 * 7 * 7, 1024),  # N, 1024
-            nn.BatchNorm1d(1024),
+            nn.BatchNorm1d(1024) if args.discriminator_batchnorm else None,
             nn.LeakyReLU(),
             nn.Linear(1024, 1),  # N, 1
-            Reshape(-1))  # N
+            Reshape(-1)] if m is not None])  # N
 
 
 class GANModel(nn.Module):
     # GAN containing generator and discriminator
-    def __init__(self, args):
+    def __init__(self, args, discriminator, generator):
         super(GANModel, self).__init__()
-        self.discriminator = DiscriminatorNetwork(args)
-        self.generator = GeneratorNetwork(args)
+        self.discriminator = discriminator
+        self.generator = generator
         self.latent_dim = args.latent_dim
         self._state_hooks = {}  # used by inferno for logging
         self.apply(initializer)  # initialize the parameters
@@ -137,18 +136,26 @@ class GANModel(nn.Module):
     def generate(self, latent):
         # Generate fake images from latent inputs
         xfake = self.generator(latent)
+        # Save images for later
+        self._state_hooks['xfake'] = xfake
         self._state_hooks['generated_images'] = format_images(xfake)  # log the generated images
         return xfake
 
+    def discriminate(self, x):
+        # Run discriminator on an input
+        return self.discriminator(x)
+
     def y_fake(self, latent):
         # Run discriminator on generated images
-        yfake = self.discriminator(self.generate(latent))
+        yfake = self.discriminate(self.generate(latent))
         return yfake
 
     def y_real(self, xreal):
         # Run discriminator on real images
+        yreal = self.discriminate(xreal)
+        # Save images for later
+        self._state_hooks['xreal'] = xreal
         self._state_hooks['real_images'] = format_images(xreal)
-        yreal = self.discriminator(xreal)
         return yreal
 
     def latent_sample(self, xreal):
@@ -187,8 +194,8 @@ class GeneratorLoss(nn.BCEWithLogitsLoss):
 
 class GeneratorTrainingCallback(Callback):
     # Callback periodically trains the generator
-    def __init__(self, args, parameters):
-        self.criterion = GeneratorLoss()
+    def __init__(self, args, parameters, criterion):
+        self.criterion = criterion
         self.opt = Adam(parameters, args.generator_lr)
         self.batch_size = args.batch_size
         self.latent_dim = args.latent_dim
@@ -264,7 +271,11 @@ class GenerateDataCallback(Callback):
 def run(args):
     save_args(args)  # save command line to a file for reference
     train_loader = mnist_data_loader(args)  # get the data
-    model = GANModel(args)  # create the model
+    # Create the model
+    model = GANModel(
+        args,
+        discriminator=DiscriminatorNetwork(args),
+        generator=GeneratorNetwork(args))
 
     # Build trainer
     trainer = Trainer(model)
@@ -274,7 +285,10 @@ def run(args):
     trainer.save_to_directory(args.save_directory)
     trainer.set_max_num_epochs(args.epochs)
     trainer.register_callback(GenerateDataCallback(args))
-    trainer.register_callback(GeneratorTrainingCallback(args, model.generator.parameters()))
+    trainer.register_callback(GeneratorTrainingCallback(
+        args,
+        parameters=model.generator.parameters(),
+        criterion=GeneratorLoss()))
     trainer.bind_loader('train', train_loader)
     # Custom logging configuration so it knows to log our images
     logger = TensorboardLogger(
@@ -314,6 +328,8 @@ def main(argv):
     parser.add_argument('--latent-dim', type=int, default=100, metavar='N', help='latent dimension')
     parser.add_argument('--discriminator-lr', type=float, default=3e-4, metavar='N', help='discriminator learning rate')
     parser.add_argument('--generator-lr', type=float, default=3e-4, metavar='N', help='generator learning rate')
+    parser.add_argument('--discriminator-batchnorm', type=bool, default=True, metavar='N', help='enable BN')
+    parser.add_argument('--generator-batchnorm', type=bool, default=True, metavar='N', help='enable BN')
 
     # Flags
     parser.add_argument('--no-cuda', action='store_true', default=False, help='disables CUDA training')

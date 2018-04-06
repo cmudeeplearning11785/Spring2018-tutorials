@@ -17,7 +17,7 @@ from torchvision import transforms
 
 from mnist_gan import format_images, Reshape,save_args, GANModel, GenerateDataCallback, GeneratorTrainingCallback
 from mnist_gan import generate_video
-
+from mnist_wgangp import WGANGeneratorLoss, WGANDiscriminatorLoss
 
 def cifar10_data_loader(args):
     # Create DataLoader for CIFAR10
@@ -29,11 +29,11 @@ def cifar10_data_loader(args):
     return train_loader
 
 
-class GeneratorNetwork(nn.Sequential):
+class CIFAR10GeneratorNetwork(nn.Sequential):
     # Network for generation
     # Input is (N, latent_dim)
     def __init__(self, args):
-        super(GeneratorNetwork, self).__init__(
+        super(CIFAR10GeneratorNetwork, self).__init__(
             nn.Linear(args.latent_dim, 1024),
             nn.BatchNorm1d(1024),
             nn.LeakyReLU(),
@@ -57,11 +57,11 @@ class GeneratorNetwork(nn.Sequential):
             nn.Sigmoid())
 
 
-class DiscriminatorNetwork(nn.Sequential):
+class CIFAR10DiscriminatorNetwork(nn.Sequential):
     # Network for discrimination
     # Input is (N, 1, 28, 28)
     def __init__(self, args):
-        super(DiscriminatorNetwork, self).__init__(
+        super(CIFAR10DiscriminatorNetwork, self).__init__(
             nn.Conv2d(1, 64, kernel_size=4, stride=2, padding=1),  # N, 64, 16, 16
             nn.BatchNorm2d(64),
             nn.LeakyReLU(),
@@ -81,38 +81,26 @@ class DiscriminatorNetwork(nn.Sequential):
             nn.Linear(1024, 1),  # N, 1
             Reshape(-1))  # N
 
-
-class DiscriminatorLoss(nn.Module):
-    # Loss function for discriminator
-    def forward(self, input, _):
-        # Targets are ignored
-        yreal, yfake = input  # unpack inputs
-        loss = yfake.mean() - yreal.mean()
-        return loss
-
-
-class GeneratorLoss(nn.BCEWithLogitsLoss):
-    # Loss function for generator
-    def forward(self, yfake):
-        loss = -yfake.mean()
-        return loss
-
-
-
 def run(args):
     save_args(args)  # save command line to a file for reference
     train_loader = cifar10_data_loader(args)  # get the data
-    model = GANModel(args)  # create the model
+    model = GANModel(
+        args,
+        discriminator=CIFAR10DiscriminatorNetwork(args),
+        generator=CIFAR10GeneratorNetwork(args))
 
     # Build trainer
     trainer = Trainer(model)
-    trainer.build_criterion(DiscriminatorLoss)
+    trainer.build_criterion(WGANDiscriminatorLoss(penalty_weight=args.penalty_weight, model=model))
     trainer.build_optimizer('Adam', model.discriminator.parameters(), lr=args.discriminator_lr)
     trainer.save_every((1, 'epochs'))
     trainer.save_to_directory(args.save_directory)
     trainer.set_max_num_epochs(args.epochs)
     trainer.register_callback(GenerateDataCallback(args))
-    trainer.register_callback(GeneratorTrainingCallback(args, model.generator.parameters()))
+    trainer.register_callback(GeneratorTrainingCallback(
+        args,
+        parameters=model.generator.parameters(),
+        criterion=WGANGeneratorLoss()))
     trainer.bind_loader('train', train_loader)
     # Custom logging configuration so it knows to log our images
     logger = TensorboardLogger(
@@ -153,6 +141,8 @@ def main(argv):
     parser.add_argument('--discriminator-lr', type=float, default=3e-4, metavar='N', help='discriminator learning rate')
     parser.add_argument('--generator-lr', type=float, default=3e-4, metavar='N', help='generator learning rate')
     parser.add_argument('--penalty-weight', type=float, default=10., metavar='N', help='gradient penalty weight')
+    parser.add_argument('--discriminator-batchnorm', type=bool, default=False, metavar='N', help='enable BN')
+    parser.add_argument('--generator-batchnorm', type=bool, default=True, metavar='N', help='enable BN')
 
     # Flags
     parser.add_argument('--no-cuda', action='store_true', default=False, help='disables CUDA training')
