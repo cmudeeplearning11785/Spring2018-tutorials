@@ -53,8 +53,8 @@ def format_images(images):
 # Command line to make images into a video
 FFMPEG = """
 ffmpeg -r 60 -f image2 -s 280x280 -i \
-generated_images\%08d.png -vcodec \
-libx264 -crf 25 -pix_fmt yuv420p generation.mp4"""
+"generated_images{}%08d.png" -vcodec \
+libx264 -crf 25 -pix_fmt yuv420p generation.mp4""".format(os.sep)
 
 
 def generate_video(path):
