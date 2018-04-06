@@ -103,7 +103,7 @@ def main(argv):
     parser = argparse.ArgumentParser(description='PyTorch GAN Example')
 
     # Output directory
-    parser.add_argument('--save-directory', type=str, default='output/mnist_wgangp/v8', help='output directory')
+    parser.add_argument('--save-directory', type=str, default='output/mnist_wgangp/v1', help='output directory')
 
     # Configuration
     parser.add_argument('--batch-size', type=int, default=128, metavar='N', help='batch size')
