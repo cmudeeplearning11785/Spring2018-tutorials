@@ -221,8 +221,7 @@ class GeneratorTrainingCallback(Callback):
         torch.randn(*latent.size(), out=latent)
         latent = Variable(latent)
         # Calculate yfake
-        y = Variable(torch.rand(latent.size(0), out=latent.data.new()) * 10).long()
-        yfake = self.trainer.model.y_fake(latent, y)
+        yfake = self.trainer.model.y_fake(latent)
         # Calculate loss
         loss = self.criterion(yfake)
         # Perform update

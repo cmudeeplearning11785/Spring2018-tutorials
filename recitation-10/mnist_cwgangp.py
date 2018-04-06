@@ -174,6 +174,31 @@ class CGenerateDataCallback(GenerateDataCallback):
         return generated
 
 
+class CGeneratorTrainingCallback(GeneratorTrainingCallback):
+    # Callback periodically trains the generator
+    def __init__(self, args, parameters, criterion):
+        super(CGeneratorTrainingCallback, self).__init__(args, parameters, criterion)
+
+    def train_generator(self):
+        # Train the generator
+        # Generate latent samples
+        if self.trainer.is_cuda():
+            latent = torch.cuda.FloatTensor(self.batch_size, self.latent_dim)
+        else:
+            latent = torch.FloatTensor(self.batch_size, self.latent_dim)
+        torch.randn(*latent.size(), out=latent)
+        latent = Variable(latent)
+        # Calculate yfake
+        y = Variable(torch.rand(latent.size(0), out=latent.data.new()) * 10).long()
+        yfake = self.trainer.model.y_fake(latent, y)
+        # Calculate loss
+        loss = self.criterion(yfake)
+        # Perform update
+        self.opt.zero_grad()
+        loss.backward()
+        self.opt.step()
+
+
 def run(args):
     save_args(args)  # save command line to a file for reference
     train_loader = mnist_cgan_data_loader(args)  # get the data
@@ -190,7 +215,7 @@ def run(args):
     trainer.save_to_directory(args.save_directory)
     trainer.set_max_num_epochs(args.epochs)
     trainer.register_callback(CGenerateDataCallback(args))
-    trainer.register_callback(GeneratorTrainingCallback(
+    trainer.register_callback(CGeneratorTrainingCallback(
         args,
         parameters=model.generator.parameters(),
         criterion=WGANGeneratorLoss()))
